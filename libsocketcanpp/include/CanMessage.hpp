@@ -2,11 +2,9 @@
 
 #include <linux/can.h>
 
-//#include <cstddef>
+#include <chrono>
 #include <cstdint>
 #include <vector>
-
-#include "exceptions/CanException.hpp"
 
 
 namespace libsocketcanpp
@@ -14,12 +12,15 @@ namespace libsocketcanpp
     class CanMessage
     {
         public:
-        CanMessage(can_frame frame) :
-          frame(frame)
-        {   
+        CanMessage(const can_frame& frame,const std::chrono::time_point<std::chrono::system_clock>& timestamp) :
+            frame(frame),
+            timestamp(timestamp)
+        {
         }
+        virtual ~CanMessage() = default;
 
         const canid_t GetId() const { return frame.can_id; }
+        const std::chrono::time_point<std::chrono::system_clock> GetTimestamp() const { return timestamp; }
         std::vector<std::uint8_t> GetPayload() const { return std::vector<std::uint8_t>(frame.data,frame.data + frame.len8_dlc); }
         size_t GetPayloadSize() const { return frame.len8_dlc; }
 
@@ -27,6 +28,7 @@ namespace libsocketcanpp
 
         private:
         struct can_frame frame;
+        std::chrono::time_point<std::chrono::system_clock> timestamp;
         
     };
 } //namespace libsocketcanpp

@@ -32,9 +32,9 @@ Can::~Can()
 }
 
 
-std::vector<CanMessage> Can::WaitForMessages(std::chrono::milliseconds timeout)
+std::vector<std::shared_ptr<CanMessage>> Can::WaitForMessages(std::chrono::milliseconds timeout)
 {
-    std::vector<CanMessage> retVal;
+    std::vector<std::shared_ptr<CanMessage>> retVal;
 
     if (fd < 0)
     {
@@ -57,10 +57,10 @@ std::vector<CanMessage> Can::WaitForMessages(std::chrono::milliseconds timeout)
         while(true)
         {
             auto aMessage = ReadMessage();
-            if(!aMessage.has_value())
+            if(aMessage)
+                retVal.push_back(aMessage);
+            else
                 break;
-
-            retVal.push_back(aMessage.value());
         }
     }
 
@@ -68,7 +68,7 @@ std::vector<CanMessage> Can::WaitForMessages(std::chrono::milliseconds timeout)
 }
 
 
-bool Can::sendMessage(const CanMessage& message)
+bool Can::SendMessage(std::shared_ptr<CanMessage> msg)
 {
     if(fd < 0)
     {
@@ -79,7 +79,7 @@ bool Can::sendMessage(const CanMessage& message)
 
     int32_t bytesWritten = 0;
 
-    can_frame frame = message.GetRawCanFrame();
+    can_frame frame = msg->GetRawCanFrame();
     bytesWritten = write(fd, (const void*)&frame, sizeof(frame));
 
     if (bytesWritten == -1)
@@ -89,7 +89,7 @@ bool Can::sendMessage(const CanMessage& message)
 }
 
 
-std::optional<CanMessage> Can::ReadMessage()
+std::shared_ptr<CanMessage> Can::ReadMessage()
 {
     if (fd < 0)
         throw SocketCanFileDescriptorException();
@@ -102,13 +102,16 @@ std::optional<CanMessage> Can::ReadMessage()
     /*if (readbytes < 0)
         throw AnExceptions with these info: errno, strerror(errno)*/
     
-    std::cout << "Bytes: " << readBytes << std::endl;
-
     if (readBytes > 0)
-        return CanMessage(canFrame);
-    
-    return std::nullopt;
-    //return CanMessage{canFrame};
+    {
+        auto now = std::chrono::system_clock::now();
+        if(auto it = creators.find(canFrame.can_id) ; it != creators.end())
+            return it->second(canFrame,now);
+        else
+            return std::make_shared<CanMessage>(canFrame,now);
+    }
+
+    return {};
 }
 
 
@@ -148,3 +151,4 @@ void Can::SocketInit()
         throw SocketCanInitException(errno);
     }
 }
+
